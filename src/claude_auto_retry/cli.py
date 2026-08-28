@@ -76,6 +76,21 @@ class SafeArgumentParser(argparse.ArgumentParser):
         raise ConfigError(message)
 
 
+def _configure_windows_stdio() -> None:
+    """避免西文代码页上的 Windows 终端因中文帮助文本触发 UnicodeEncodeError。"""
+
+    if os.name != "nt" or "PYTHONIOENCODING" in os.environ:
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                # 被宿主替换或已经关闭的 stream 不阻塞 CLI 启动。
+                continue
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = SafeArgumentParser(
         prog="claude-auto-retry",
@@ -293,6 +308,7 @@ def _handle_supervise(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_windows_stdio()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
