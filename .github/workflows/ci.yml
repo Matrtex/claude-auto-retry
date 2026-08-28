@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.10"
+          - "3.13"
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 配置 Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装静态检查和构建工具
+        run: python -m pip install --upgrade build ruff twine
+
+      - name: 检查 Python 语法
+        run: python -m compileall -q src
+
+      - name: 运行 Ruff 静态检查
+        run: python -m ruff check .
+
+      - name: 构建 wheel 和 sdist
+        run: python -m build
+
+      - name: 检查分发包元数据
+        run: python -m twine check dist/*
+
+      - name: 安装构建出的 wheel
+        run: >-
+          python -c "import glob, subprocess, sys;
+          wheels = glob.glob('dist/*.whl');
+          assert len(wheels) == 1, f'expected one wheel, found {wheels}';
+          subprocess.check_call([sys.executable, '-m', 'pip', 'install', wheels[0]])"
+
+      - name: 验证 CLI 帮助
+        run: claude-auto-retry --help
+
+      - name: 验证 CLI 版本
+        run: claude-auto-retry --version
